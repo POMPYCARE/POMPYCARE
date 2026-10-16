@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Suivi pompiers</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #111418; color: #f2f2f2; }
+
+  /* ---------- Bandeau du haut ---------- */
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+           padding: 12px 18px; background: #1b1f25; border-bottom: 2px solid #e8562a; }
+  header h1 { margin: 0; font-size: 20px; }
+  header p { margin: 4px 0 0; font-size: 13px; color: #9aa3ad; }
+  #date { display: inline-block; }
+  #date::first-letter { text-transform: uppercase; }
+  #mode { color: #f2a541; font-weight: bold; }
+  .boutons { display: flex; gap: 8px; }
+  button { font: inherit; font-weight: bold; border: none; border-radius: 8px; padding: 10px 16px; cursor: pointer; }
+  .btn-principal { background: #e8562a; color: #fff; }
+  .btn-danger { background: #2c323a; color: #f2f2f2; border: 1px solid #e5383b; }
+  .btn-gris { background: #2c323a; color: #f2f2f2; }
+  button:disabled { opacity: .4; cursor: default; }
+
+  /* ---------- Mise en page ---------- */
+  main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding: 16px; }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+
+  /* ---------- Cartes des pompiers ---------- */
+  #liste { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+  .carte { background: #1b1f25; border: 2px solid #2c323a; border-radius: 10px; padding: 14px; }
+  .carte.alerte { border-color: #e5383b; background: #2a1416; }
+  .carte.perdu { border-color: #f2a541; }
+  .entete { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 8px; }
+  .nom { font-size: 20px; font-weight: bold; display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .nom span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pastille { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+  .badge { font-size: 12px; padding: 3px 8px; border-radius: 20px; background: #2c323a; color: #9aa3ad; white-space: nowrap; }
+  .mesures { display: flex; gap: 10px; }
+  .mesure { flex: 1; background: #14181d; border-radius: 8px; padding: 10px; text-align: center; border-bottom: 3px solid transparent; }
+  .mesure .val { font-size: 30px; font-weight: bold; }
+  .mesure .unite { font-size: 14px; color: #9aa3ad; }
+  .mesure .lib { font-size: 12px; color: #9aa3ad; margin-top: 2px; }
+  .mesure.ok { border-bottom-color: #22c55e; }
+  .mesure.attention { border-bottom-color: #f2a541; } .mesure.attention .val { color: #f2a541; }
+  .mesure.danger { border-bottom-color: #e5383b; } .mesure.danger .val { color: #ff5a5d; }
+  .altitude { margin-top: 10px; background: #14181d; border-radius: 8px; padding: 8px 10px; font-size: 15px;
+              display: flex; justify-content: space-between; }
+  .altitude span:last-child { font-weight: bold; }
+  .courbe { margin-top: 10px; background: #14181d; border-radius: 8px; padding: 6px 8px; }
+  .courbe .lib { font-size: 11px; color: #9aa3ad; }
+  .pied { margin-top: 8px; font-size: 12px; color: #9aa3ad; display: flex; justify-content: space-between; align-items: center; }
+  .deconnecter { background: transparent; color: #9aa3ad; border: 1px solid #2c323a; padding: 4px 10px; font-size: 12px; }
+  .msg { margin-top: 8px; padding: 8px; border-radius: 6px; background: #e5383b; color: #fff; font-weight: bold; font-size: 14px; }
+  .msg.orange { background: #f2a541; color: #111; }
+
+  #vide { border: 2px dashed #2c323a; border-radius: 10px; padding: 40px 20px; text-align: center; color: #9aa3ad; }
+  #vide p { margin: 0 0 16px; font-size: 16px; }
+
+  /* ---------- Carte de localisation ---------- */
+  #bloc-loc { background: #1b1f25; border: 2px solid #2c323a; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; }
+  #bloc-loc .entete { margin-bottom: 10px; }
+  #outils-loc { display: flex; gap: 6px; }
+  #outils-loc button { padding: 6px 10px; font-size: 12px; }
+  #carte-loc { position: relative; background: #14181d; border-radius: 8px; min-height: 420px; flex: 1; overflow: hidden; }
+  #fond { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .point { position: absolute; width: 22px; height: 22px; border-radius: 50%; border: 3px solid #fff;
+           transform: translate(-50%, -50%); box-shadow: 0 0 4px rgba(0,0,0,.6); transition: left 1s, top 1s; }
+  .point.alerte { animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 10px rgba(229,56,59,.6); } }
+  .etiquette { position: absolute; transform: translate(-50%, -190%); background: rgba(17,20,24,.85); color: #f2f2f2;
+               font-size: 12px; padding: 2px 6px; border-radius: 4px; white-space: nowrap; transition: left 1s, top 1s; }
+  #adresse { margin-top: 8px; font-size: 14px; display: none; }
+  #adresse b { color: #e8562a; }
+  #sans-gps { margin-top: 8px; font-size: 12px; color: #9aa3ad; display: none; }
+
+  /* ---------- Fenetres (connexion, reglages) ---------- */
+  .fond-modal { position: fixed; inset: 0; background: rgba(0,0,0,.65); display: none; align-items: center; justify-content: center; padding: 16px; }
+  .modal { background: #1b1f25; border: 2px solid #2c323a; border-radius: 12px; padding: 20px; width: 100%; max-width: 440px; }
+  .modal h2 { margin: 0 0 12px; font-size: 20px; }
+  .detecte { display: flex; justify-content: space-between; align-items: center; padding: 12px; border: 2px solid #2c323a;
+             border-radius: 8px; margin-bottom: 8px; cursor: pointer; background: #14181d; }
+  .detecte.choisi { border-color: #e8562a; }
+  .detecte small { color: #9aa3ad; }
+  .recherche { color: #9aa3ad; font-size: 14px; margin: 8px 0 12px; }
+  label { display: block; font-weight: bold; margin: 12px 0 6px; font-size: 14px; }
+  input[type=text], input[type=number] { width: 100%; font: inherit; padding: 10px; border: 2px solid #2c323a;
+           border-radius: 8px; background: #14181d; color: #f2f2f2; }
+  .couleurs { display: flex; gap: 8px; }
+  .couleur { width: 32px; height: 32px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; }
+  .couleur.choisi { border-color: #fff; }
+  .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  .grille2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .note { font-size: 13px; color: #9aa3ad; margin: 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Suivi des pompiers engag&eacute;s</h1>
+    <p><span id="date"></span> &middot; <span id="heure"></span> <span id="mode"></span></p>
+  </div>
+  <div class="boutons">
+    <button class="btn-principal" onclick="ouvrirConnexion()">+ Connecter un bo&icirc;tier</button>
+    <button class="btn-danger" id="btn-fin" onclick="finIntervention()">Fin d'intervention</button>
+  </div>
+</header>
+
+<main>
+  <section>
+    <div id="vide">
+      <p>Aucun pompier connect&eacute; pour l'instant.</p>
+      <button class="btn-principal" onclick="ouvrirConnexion()">+ Connecter un bo&icirc;tier</button>
+    </div>
+    <div id="liste"></div>
+  </section>
+
+  <section id="bloc-loc">
+    <div class="entete">
+      <span class="nom">Localisation</span>
+      <div id="outils-loc">
+        <button class="btn-gris" onclick="document.getElementById('fichier-plan').click()">Charger un plan / une photo</button>
+        <button class="btn-gris" onclick="ouvrirReglages()">R&eacute;glages</button>
+      </div>
+    </div>
+    <div id="carte-loc">
+      <img id="fond" alt="">
+      <svg id="plan-defaut" viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%">
+        <rect x="0" y="0" width="100" height="100" fill="#14181d"/>
+        <g stroke="#232930" stroke-width=".3">
+          <line x1="0" y1="20" x2="100" y2="20"/><line x1="0" y1="40" x2="100" y2="40"/><line x1="0" y1="60" x2="100" y2="60"/><line x1="0" y1="80" x2="100" y2="80"/>
+          <line x1="20" y1="0" x2="20" y2="100"/><line x1="40" y1="0" x2="40" y2="100"/><line x1="60" y1="0" x2="60" y2="100"/><line x1="80" y1="0" x2="80" y2="100"/>
+        </g>
+        <rect x="12" y="22" width="70" height="40" fill="#2c323a" stroke="#4b5563" stroke-width=".5"/>
+        <rect x="20" y="62" width="22" height="18" fill="#2c323a" stroke="#4b5563" stroke-width=".5"/>
+      </svg>
+      <div id="texte-plan" style="position:absolute;left:0;right:0;bottom:12px;text-align:center;font-size:13px;color:#9aa3ad">Plan d'exemple : chargez le plan du b&acirc;timent ou une photo satellite</div>
+      <div id="points"></div>
+      <div id="google-carte" style="position:absolute;inset:0;display:none"></div>
+    </div>
+    <div id="adresse"></div>
+    <div id="sans-gps"></div>
+    <input type="file" id="fichier-plan" accept="image/*" hidden onchange="chargerPlan(this)">
+  </section>
+</main>
+
+
+<!-- Fenetre : connecter un boitier -->
+<div class="fond-modal" id="modal-connexion">
+  <div class="modal">
+    <h2>Connecter un bo&icirc;tier</h2>
+    <div class="recherche" id="texte-recherche">Recherche des bo&icirc;tiers &agrave; proximit&eacute;...</div>
+    <div id="liste-detectes"></div>
+    <div id="formulaire" style="display:none">
+      <label for="champ-nom">Nom du pompier</label>
+      <input type="text" id="champ-nom" placeholder="ex : Sgt Martin" maxlength="18">
+      <label>Couleur</label>
+      <div class="couleurs" id="choix-couleurs"></div>
+    </div>
+    <div class="actions">
+      <button class="btn-gris" onclick="fermer('modal-connexion')">Annuler</button>
+      <button class="btn-principal" id="btn-connecter" onclick="connecter()" disabled>Connecter</button>
+    </div>
+  </div>
+</div>
+
+<!-- Fenetre : reglages de la carte -->
+<div class="fond-modal" id="modal-reglages">
+  <div class="modal">
+    <h2>R&eacute;glages de la carte</h2>
+    <p class="note">Coordonn&eacute;es GPS des bords du plan ou de la photo charg&eacute;e.</p>
+    <div class="grille2">
+      <div><label>Nord (lat.)</label><input type="number" step="0.00001" id="r-nord"></div>
+      <div><label>Sud (lat.)</label><input type="number" step="0.00001" id="r-sud"></div>
+      <div><label>Ouest (long.)</label><input type="number" step="0.00001" id="r-ouest"></div>
+      <div><label>Est (long.)</label><input type="number" step="0.00001" id="r-est"></div>
+    </div>
+    <div class="actions">
+      <button class="btn-gris" onclick="fermer('modal-reglages')">Annuler</button>
+      <button class="btn-principal" onclick="enregistrerReglages()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Fenetre : confirmation -->
+<div class="fond-modal" id="modal-confirmer">
+  <div class="modal">
+    <h2 id="confirmer-titre">Confirmer</h2>
+    <p class="note" id="confirmer-texte"></p>
+    <div class="actions">
+      <button class="btn-gris" onclick="fermer('modal-confirmer')">Annuler</button>
+      <button class="btn-principal" id="confirmer-ok">Confirmer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// =====================================================================
+//  MODE DEMO : true  = boitiers simules (pour developper sans materiel)
+//              false = vraies donnees lues sur la station (/data)
+// =====================================================================
+const MODE_DEMO = true;
+
+// ---------- Seuils d'alerte ----------
+const BPM_MIN = 40, BPM_MAX = 180, BPM_EFFORT = 150;   // 150-180 : effort intense (orange)
+const TEMP_ATTENTION = 38.0, TEMP_MAX = 38.5;
+const DELAI_PERTE = 10;          // secondes sans message -> liaison perdue
+const HAUTEUR_ETAGE = 2.8;       // metres, pour estimer l'etage
+const COULEURS = ["#ffd23f", "#22c55e", "#0ea5c6", "#f472b6", "#a78bfa", "#fb923c"];
+
+// ---------- Memoire (survit a un rechargement de la page) ----------
+function lire(cle, defaut) {
+  try { const v = localStorage.getItem(cle); return v ? JSON.parse(v) : defaut; } catch (e) { return defaut; }
+}
+function ecrire(cle, valeur) {
+  try { localStorage.setItem(cle, JSON.stringify(valeur)); } catch (e) { /* stockage indisponible */ }
+}
+
+let connectes = lire("connectes", []);          // [{id, nom, couleur}]
+let zone = lire("zone", { nord: 44.83850, sud: 44.83700, ouest: -0.58050, est: -0.57800 });
+let derniereListe = [];                          // tous les boitiers entendus par la station
+
+// ---------- Simulateur ----------
+const debutDemo = Date.now();
+const simu = {
+  P1: { bpm: 95, temp: 37.1, alt: 5.7, x: .45, y: .40 },
+  P2: { bpm: 115, temp: 37.4, alt: 0, x: .30, y: .50 },
+  P3: { bpm: 100, temp: 37.0, alt: -2.5, x: .55, y: .55 },
+  P4: { bpm: 88, temp: 36.9, alt: 0, x: .20, y: .75 }
+};
+function alea(a, b) { return a + Math.random() * (b - a); }
+function donneesSimulees() {
+  const t = Math.floor((Date.now() - debutDemo) / 1000) % 120;
+  const res = [];
+  for (const id in simu) {
+    const s = simu[id];
+    let cibleBpm = id === "P2" ? (t >= 30 && t < 70 ? 192 : 125) : (id === "P1" ? 105 : 95);
+    let cibleTemp = id === "P2" && t >= 70 ? 38.9 : 37.2;
+    s.bpm += (cibleBpm - s.bpm) * 0.15 + alea(-3, 3);
+    s.temp += (cibleTemp - s.temp) * 0.1 + alea(-0.04, 0.04);
+    s.x = Math.min(.85, Math.max(.1, s.x + alea(-.01, .01)));
+    s.y = Math.min(.8, Math.max(.2, s.y + alea(-.01, .01)));
+    const enInterieur = id === "P3";   // P3 est au sous-sol : pas de GPS
+    res.push({
+      id: id,
+      bpm: id === "P3" && t >= 20 && t < 35 ? 0 : Math.round(s.bpm),
+      temp: +s.temp.toFixed(1),
+      alt: s.alt,
+      lat: enInterieur ? 0 : +(zone.nord - s.y * (zone.nord - zone.sud)).toFixed(6),
+      lon: enInterieur ? 0 : +(zone.ouest + s.x * (zone.est - zone.ouest)).toFixed(6),
+      rssi: Math.round(-80 - Math.random() * 25),
+      age: id === "P1" && t >= 90 && t < 105 ? t - 89 : 1
+    });
+  }
+  return res;
+}
+
+async function lireDonnees() {
+  if (MODE_DEMO) return donneesSimulees();
+  const r = await fetch("/data");
+  return r.json();
+}
+
+
+// =====================================================================
+//  GOOGLE MAPS (optionnel)
+//  Collez votre cle entre les guillemets. Laisser vide = plan hors ligne.
+//  Sans internet, l'appli revient automatiquement au plan charge.
+// =====================================================================
+const GOOGLE_MAPS_CLE = "";
+
+let gCarte = null, gGeocodeur = null, gMarqueurs = {}, gCentre = false;
+let derniereAdresse = { lat: 0, lon: 0 };
+
+function chargerGoogleMaps() {
+  if (!GOOGLE_MAPS_CLE || !navigator.onLine) return;
+  const sc = document.createElement("script");
+  sc.src = "https://maps.googleapis.com/maps/api/js?key=" + encodeURIComponent(GOOGLE_MAPS_CLE) + "&callback=initGoogle&language=fr";
+  sc.async = true;
+  sc.onerror = () => console.log("Google Maps indisponible : plan hors ligne utilise.");
+  document.head.appendChild(sc);
+}
+
+function initGoogle() {
+  const div = document.getElementById("google-carte");
+  div.style.display = "block";
+  gCarte = new google.maps.Map(div, {
+    center: { lat: (zone.nord + zone.sud) / 2, lng: (zone.ouest + zone.est) / 2 },
+    zoom: 18,
+    mapTypeId: "hybrid",          // vue satellite + noms des rues
+    streetViewControl: false,
+    mapTypeControl: false,
+    fullscreenControl: false
+  });
+  gGeocodeur = new google.maps.Geocoder();
+  afficher();
+}
+
+// Met a jour les points des pompiers sur la carte Google
+function majGoogle(points) {
+  if (!gCarte) return;
+  const vus = {};
+  points.forEach(p => {
+    const pos = { lat: p.d.lat, lng: p.d.lon };
+    vus[p.c.id] = true;
+    let m = gMarqueurs[p.c.id];
+    if (!m) {
+      m = new google.maps.Marker({
+        map: gCarte, position: pos, title: p.c.nom,
+        label: { text: p.c.nom, color: "#ffffff", fontWeight: "bold", fontSize: "12px" },
+        icon: { path: google.maps.SymbolPath.CIRCLE, scale: 9, fillColor: p.c.couleur, fillOpacity: 1,
+                strokeColor: "#ffffff", strokeWeight: 3, labelOrigin: new google.maps.Point(0, -3.2) }
+      });
+      gMarqueurs[p.c.id] = m;
+    }
+    m.setPosition(pos);
+  });
+  // Retire les pompiers deconnectes
+  for (const id in gMarqueurs) {
+    if (!vus[id]) { gMarqueurs[id].setMap(null); delete gMarqueurs[id]; }
+  }
+  // Centre la carte une fois sur le premier pompier localise
+  if (!gCentre && points.length) { gCarte.setCenter({ lat: points[0].d.lat, lng: points[0].d.lon }); gCentre = true; }
+  // Adresse du batiment (seulement si la position a bouge de plus de ~30 m,
+  // pour rester dans les 10 000 recherches gratuites par mois)
+  if (points.length && gGeocodeur) {
+    const p = points[0].d;
+    const bouge = Math.abs(p.lat - derniereAdresse.lat) > 0.0003 || Math.abs(p.lon - derniereAdresse.lon) > 0.0004;
+    if (bouge) {
+      derniereAdresse = { lat: p.lat, lon: p.lon };
+      gGeocodeur.geocode({ location: { lat: p.lat, lng: p.lon } }, (res, statut) => {
+        const el = document.getElementById("adresse");
+        if (statut === "OK" && res[0]) {
+          el.innerHTML = "<b>B&acirc;timent :</b> " + echapper(res[0].formatted_address);
+          el.style.display = "block";
+        }
+      });
+    }
+  }
+}
+
+// ---------- Etat de chaque mesure ----------
+function etatBpm(b) {
+  if (!b) return "vide";
+  if (b < BPM_MIN || b > BPM_MAX) return "danger";
+  if (b > BPM_EFFORT || b < 50) return "attention";
+  return "ok";
+}
+function etatTemp(t) {
+  if (!t) return "vide";
+  if (t >= TEMP_MAX) return "danger";
+  if (t >= TEMP_ATTENTION) return "attention";
+  return "ok";
+}
+function fmt(n, dec) { return n.toFixed(dec).replace(".", ","); }
+
+// ---------- Courbe du rythme cardiaque ----------
+const POINTS = 60;
+const historique = {};
+function courbe(points) {
+  if (points.length < 2) return '<div class="lib">Courbe du rythme cardiaque : en attente...</div>';
+  const L = 260, H = 50, min = 40, max = 200;
+  const x = i => (i / (POINTS - 1)) * L;
+  const y = v => H - (Math.min(Math.max(v, min), max) - min) / (max - min) * H;
+  const decal = POINTS - points.length;
+  const pts = points.map((v, i) => x(i + decal).toFixed(1) + "," + y(v).toFixed(1)).join(" ");
+  return '<div class="lib">Rythme cardiaque, derni&egrave;re minute</div>'
+    + '<svg viewBox="0 0 ' + L + ' ' + H + '" width="100%" height="50" preserveAspectRatio="none">'
+    + '<line x1="0" x2="' + L + '" y1="' + y(BPM_MAX) + '" y2="' + y(BPM_MAX) + '" stroke="#e5383b" stroke-dasharray="4 4" stroke-width="1"/>'
+    + '<polyline points="' + pts + '" fill="none" stroke="#e8562a" stroke-width="2"/></svg>';
+}
+
+// ---------- Affichage ----------
+function afficher() {
+  const liste = document.getElementById("liste");
+  document.getElementById("vide").style.display = connectes.length ? "none" : "block";
+  document.getElementById("btn-fin").style.display = connectes.length ? "inline-block" : "none";
+
+  let html = "";
+  const points = [];
+  const sansGps = [];
+
+  connectes.forEach(c => {
+    const d = derniereListe.find(p => p.id === c.id);
+    const age = d ? d.age : 999;
+    const perdu = age > DELAI_PERTE;
+    const eb = d ? etatBpm(d.bpm) : "vide", et = d ? etatTemp(d.temp) : "vide";
+    const alerte = !perdu && (eb === "danger" || et === "danger");
+
+    const msgs = [];
+    if (!d) msgs.push(["orange", "En attente des premi&egrave;res donn&eacute;es..."]);
+    else if (perdu) msgs.push(["orange", "Liaison perdue depuis " + age + " s"]);
+    if (d && !perdu) {
+      if (eb === "danger") msgs.push(["", "Rythme cardiaque anormal"]);
+      if (et === "danger") msgs.push(["", "Temp&eacute;rature corporelle &eacute;lev&eacute;e"]);
+      if (!d.bpm) msgs.push(["orange", "Capteur cardiaque non pos&eacute; sur la peau"]);
+    }
+
+    let altTxt = "--";
+    if (d && d.alt !== undefined && d.alt !== null) {
+      const etage = Math.round(d.alt / HAUTEUR_ETAGE);
+      altTxt = fmt(d.alt, 1) + " m" + (etage === 0 ? " (rez-de-chauss&eacute;e)" : " (&eacute;tage " + etage + ")");
+    }
+
+    html += '<div class="carte' + (alerte ? " alerte" : perdu ? " perdu" : "") + '">'
+      + '<div class="entete"><span class="nom"><span class="pastille" style="background:' + c.couleur + '"></span>'
+      + '<span>' + echapper(c.nom) + '</span></span>'
+      + '<span class="badge">' + (d ? "vu il y a " + age + " s" : "en attente") + '</span></div>'
+      + '<div class="mesures">'
+      + '<div class="mesure ' + eb + '"><div class="val">' + (d && d.bpm ? d.bpm : "--") + ' <span class="unite">bpm</span></div><div class="lib">Rythme cardiaque</div></div>'
+      + '<div class="mesure ' + et + '"><div class="val">' + (d && d.temp ? fmt(d.temp, 1) : "--") + ' <span class="unite">&deg;C</span></div><div class="lib">Temp. corporelle</div></div>'
+      + '</div>'
+      + '<div class="altitude"><span>Altitude</span><span>' + altTxt + '</span></div>'
+      + '<div class="courbe">' + courbe(historique[c.id] || []) + '</div>'
+      + '<div class="pied"><span>Bo&icirc;tier ' + c.id + (d ? " &middot; signal " + d.rssi + " dBm" : "") + '</span>'
+      + '<button class="deconnecter" data-id="' + c.id + '">D&eacute;connecter</button></div>';
+    msgs.forEach(m => html += '<div class="msg ' + m[0] + '">' + m[1] + '</div>');
+    html += '</div>';
+
+    if (d && d.lat && d.lon) points.push({ c: c, d: d, alerte: alerte });
+    else sansGps.push(c.nom);
+  });
+  liste.innerHTML = html;
+
+  // Points sur la carte
+  let ph = "";
+  points.forEach(p => {
+    const x = (p.d.lon - zone.ouest) / (zone.est - zone.ouest) * 100;
+    const y = (zone.nord - p.d.lat) / (zone.nord - zone.sud) * 100;
+    if (!gCarte && (x < 0 || x > 100 || y < 0 || y > 100)) { sansGps.push(p.c.nom + " (hors plan)"); return; }
+    ph += '<div class="point' + (p.alerte ? " alerte" : "") + '" style="left:' + x + '%;top:' + y + '%;background:' + p.c.couleur + '"></div>'
+        + '<div class="etiquette" style="left:' + x + '%;top:' + y + '%">' + echapper(p.c.nom) + '</div>';
+  });
+  document.getElementById("points").innerHTML = gCarte ? "" : ph;
+  majGoogle(points);
+  const sg = document.getElementById("sans-gps");
+  sg.style.display = sansGps.length ? "block" : "none";
+  sg.innerHTML = "Position GPS indisponible (en int&eacute;rieur ou sans GPS) : " + sansGps.map(echapper).join(", ");
+}
+
+function echapper(t) {
+  return String(t).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
+
+// ---------- Connexion d'un boitier ----------
+let choixId = null, choixCouleur = null;
+
+function ouvrirConnexion() {
+  choixId = null;
+  document.getElementById("champ-nom").value = "";
+  document.getElementById("formulaire").style.display = "none";
+  document.getElementById("btn-connecter").disabled = true;
+  const libres = COULEURS.filter(col => !connectes.some(c => c.couleur === col));
+  choixCouleur = libres[0] || COULEURS[0];
+  majCouleurs();
+  majDetectes();
+  document.getElementById("modal-connexion").style.display = "flex";
+}
+
+function majDetectes() {
+  const detectes = derniereListe.filter(p => p.age <= DELAI_PERTE && !connectes.some(c => c.id === p.id));
+  document.getElementById("texte-recherche").textContent = detectes.length
+    ? "Boîtiers détectés par l'antenne LoRa :"
+    : "Recherche des boîtiers à proximité... Allumez le boîtier du pompier.";
+  document.getElementById("liste-detectes").innerHTML = detectes.map(p =>
+    '<div class="detecte' + (p.id === choixId ? " choisi" : "") + '" onclick="choisir(\'' + p.id + '\')">'
+    + '<b>Bo&icirc;tier ' + p.id + '</b><small>signal ' + qualite(p.rssi) + ' (' + p.rssi + ' dBm)</small></div>'
+  ).join("");
+}
+
+function qualite(rssi) { return rssi > -90 ? "bon" : rssi > -110 ? "moyen" : "faible"; }
+
+function choisir(id) {
+  choixId = id;
+  document.getElementById("formulaire").style.display = "block";
+  document.getElementById("btn-connecter").disabled = false;
+  document.getElementById("champ-nom").focus();
+  majDetectes();
+}
+
+function majCouleurs() {
+  document.getElementById("choix-couleurs").innerHTML = COULEURS.map(col =>
+    '<div class="couleur' + (col === choixCouleur ? " choisi" : "") + '" style="background:' + col
+    + '" onclick="choixCouleur=\'' + col + '\';majCouleurs()"></div>').join("");
+}
+
+function connecter() {
+  if (!choixId) return;
+  const nom = document.getElementById("champ-nom").value.trim() || ("Pompier " + choixId);
+  connectes.push({ id: choixId, nom: nom, couleur: choixCouleur });
+  ecrire("connectes", connectes);
+  fermer("modal-connexion");
+  afficher();
+}
+
+// Fenetre de confirmation (remplace confirm(), bloque dans certains apercus)
+function demanderConfirmation(titre, texte, action) {
+  document.getElementById("confirmer-titre").textContent = titre;
+  document.getElementById("confirmer-texte").textContent = texte;
+  document.getElementById("confirmer-ok").onclick = () => { fermer("modal-confirmer"); action(); };
+  document.getElementById("modal-confirmer").style.display = "flex";
+}
+
+function deconnecter(id) {
+  const c = connectes.find(x => x.id === id);
+  demanderConfirmation("Déconnecter le boîtier",
+    "Retirer " + (c ? c.nom : id) + " (boîtier " + id + ") du suivi ?",
+    () => {
+      connectes = connectes.filter(x => x.id !== id);
+      ecrire("connectes", connectes);
+      afficher();
+    });
+}
+
+function finIntervention() {
+  demanderConfirmation("Fin d'intervention",
+    "Déconnecter tous les boîtiers (" + connectes.length + ") et terminer l'intervention ?",
+    () => {
+      connectes = [];
+      ecrire("connectes", connectes);
+      afficher();
+    });
+}
+
+// Le bouton reagit des l'appui (l'ecran se redessine chaque seconde)
+document.getElementById("liste").addEventListener("pointerdown", e => {
+  const b = e.target.closest(".deconnecter");
+  if (b) { e.preventDefault(); deconnecter(b.dataset.id); }
+});
+
+function fermer(id) { document.getElementById(id).style.display = "none"; }
+
+// ---------- Plan / photo de fond ----------
+function chargerPlan(input) {
+  const f = input.files[0];
+  if (!f) return;
+  const lecteur = new FileReader();
+  lecteur.onload = () => { appliquerPlan(lecteur.result); ecrire("plan", lecteur.result); ouvrirReglages(); };
+  lecteur.readAsDataURL(f);
+}
+function appliquerPlan(src) {
+  const img = document.getElementById("fond");
+  img.src = src;
+  img.style.display = "block";
+  document.getElementById("plan-defaut").style.display = "none";
+  document.getElementById("texte-plan").style.display = "none";
+}
+function ouvrirReglages() {
+  document.getElementById("r-nord").value = zone.nord;
+  document.getElementById("r-sud").value = zone.sud;
+  document.getElementById("r-ouest").value = zone.ouest;
+  document.getElementById("r-est").value = zone.est;
+  document.getElementById("modal-reglages").style.display = "flex";
+}
+function enregistrerReglages() {
+  const z = {
+    nord: parseFloat(document.getElementById("r-nord").value),
+    sud: parseFloat(document.getElementById("r-sud").value),
+    ouest: parseFloat(document.getElementById("r-ouest").value),
+    est: parseFloat(document.getElementById("r-est").value)
+  };
+  if ([z.nord, z.sud, z.ouest, z.est].some(isNaN) || z.nord <= z.sud || z.est <= z.ouest) {
+    alert("Vérifiez les valeurs : le nord doit être plus grand que le sud, et l'est plus grand que l'ouest.");
+    return;
+  }
+  zone = z;
+  ecrire("zone", zone);
+  fermer("modal-reglages");
+  afficher();
+}
+
+// ---------- Horloge ----------
+function horloge() {
+  const m = new Date();
+  document.getElementById("date").textContent =
+    m.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  document.getElementById("heure").textContent =
+    m.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+}
+
+// ---------- Boucle principale ----------
+async function rafraichir() {
+  try {
+    derniereListe = await lireDonnees();
+    derniereListe.forEach(p => {
+      const h = historique[p.id] = historique[p.id] || [];
+      if (p.bpm > 0 && p.age <= 3) { h.push(p.bpm); if (h.length > POINTS) h.shift(); }
+    });
+    document.getElementById("mode").textContent = MODE_DEMO ? "· MODE DÉMO (données simulées)" : "";
+  } catch (e) {
+    document.getElementById("mode").textContent = "· Station injoignable : vérifiez le Wi-Fi Station-Pompiers";
+  }
+  afficher();
+  if (document.getElementById("modal-connexion").style.display === "flex") majDetectes();
+}
+
+const planSauve = lire("plan", null);
+if (planSauve) appliquerPlan(planSauve); else document.getElementById("fond").style.display = "none";
+horloge();
+setInterval(horloge, 1000);
+chargerGoogleMaps();
+rafraichir();
+setInterval(rafraichir, 1000);
+</script>
+</body>
+</html>
